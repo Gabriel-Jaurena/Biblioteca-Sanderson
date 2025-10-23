@@ -7,41 +7,45 @@ import {
   Param,
   Delete,
   Query,
+  ParseIntPipe, // Opcional pero recomendado para validar IDs numéricos
 } from '@nestjs/common';
 import { LibrosService } from './libros.service';
 import { CreateLibroDto } from './dto/create-libro.dto';
 import { UpdateLibroDto } from './dto/update-libro.dto';
 import { QueryLibrosDto } from './dto/query-libros-dto';
-
+import { Libro } from './entities/libro.entity';
 @Controller('libros')
 export class LibrosController {
   constructor(private readonly librosService: LibrosService) {}
 
   @Post()
-  create(@Body() createLibroDto: CreateLibroDto) {
-    return this.librosService.create(createLibroDto);
+  async create(@Body() createLibroDto: CreateLibroDto): Promise<Libro> {
+    return await this.librosService.create(createLibroDto);
   }
 
   @Get()
-  findAll(@Query() query: QueryLibrosDto) {
+  async findAll(@Query() query: QueryLibrosDto): Promise<Libro[]> {
     if (Object.keys(query).length) {
-      return this.librosService.filterLibros(query);
+      return await this.librosService.filterLibros(query);
     }
-    return this.librosService.findAll();
+    return await this.librosService.findAll();
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.librosService.findOne(+id);
+  async findOne(@Param('id', ParseIntPipe) id: number): Promise<Libro> {
+    return await this.librosService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateLibroDto: UpdateLibroDto) {
-    return this.librosService.update(+id, updateLibroDto);
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateLibroDto: UpdateLibroDto,
+  ): Promise<Libro> {
+    return await this.librosService.update(id, updateLibroDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.librosService.remove(+id);
+  async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
+    await this.librosService.remove(id);
   }
 }
