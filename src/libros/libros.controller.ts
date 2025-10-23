@@ -31,21 +31,28 @@ export class LibrosController {
     return await this.librosService.findAll();
   }
 
-  @Get(':id')
-  async findOne(@Param('id', ParseIntPipe) id: number): Promise<Libro> {
-    return await this.librosService.findOne(id);
+  @Get(':sagaId/:libroNumero')
+  async findOne(
+    @Param('sagaId', ParseIntPipe) sagaId: number,
+    @Param('libroNumero', ParseIntPipe) libroNumero: number,
+  ): Promise<Libro> {
+    return await this.librosService.findOne(sagaId, libroNumero);
   }
 
-  @Patch(':id')
+  @Patch(':sagaId/:libroNumero')
   async update(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('sagaId', ParseIntPipe) sagaId: number,
+    @Param('libroNumero', ParseIntPipe) libroNumero: number,
     @Body() updateLibroDto: UpdateLibroDto,
   ): Promise<Libro> {
-    return await this.librosService.update(id, updateLibroDto);
+    return await this.librosService.update(sagaId, libroNumero, updateLibroDto);
   }
 
-  @Delete(':id')
-  async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
-    await this.librosService.remove(id);
+  @Delete(':sagaId/:libroNumero')
+  async remove(
+    @Param('sagaId', ParseIntPipe) sagaId: number,
+    @Param('libroNumero', ParseIntPipe) libroNumero: number,
+  ): Promise<void> {
+    await this.librosService.remove(sagaId, libroNumero);
   }
 }

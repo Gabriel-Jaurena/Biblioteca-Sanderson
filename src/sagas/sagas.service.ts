@@ -1,82 +1,120 @@
 import {
-  ConflictException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { CreateSagasDto } from './dto/create-sagas.dto';
 import { UpdateSagasDto } from './dto/update-sagas.dto';
 import { Sagas } from './entities/sagas.entity';
-import { sagas } from 'src/base-de-datos/sagas';
 import { QuerySagasDto } from './dto/query-sagas-dto';
-import { libros } from 'src/base-de-datos/libros';
+import { Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Libro } from 'src/libros/entities/libro.entity';
 
 @Injectable()
 export class SagasService {
+  constructor(
+    @InjectRepository(Sagas)
+    private sagasRepository: Repository<Sagas>,
+    @InjectRepository(Libro) // Ya no es necesario aquí
+    private librosRepository: Repository<Libro>,
+  ) {}
+
   // Método para filtrar sagas según los criterios proporcionados
-  filterSagas(query: QuerySagasDto) {
+  async filterSagas(query: QuerySagasDto): Promise<Sagas[]> {
     const { nombre, libroTitulo } = query;
-    const filteredSagas = sagas.filter((saga) => {
-      let matches = true;
+    // Inicia el QueryBuilder para la entidad Sagas con alias 'saga'
+    const queryBuilder = this.sagasRepository
+      .createQueryBuilder('saga')
+      // Une la relación 'libros' (definida en Sagas entity) y selecciona sus datos,
+      // usando el alias 'libro' para la tabla unida.
+      .leftJoinAndSelect('saga.libros', 'libro');
+    let hasInitialWhere = false; // Para saber si ya usamos .where()
+    // Aplica filtro por nombre de la saga si se proporciona
+    if (nombre) {
+      // Usamos ILIKE para búsqueda insensible a mayúsculas/minúsculas en PostgreSQL
+      queryBuilder.where('saga.nombre ILIKE :nombre', {
+        nombre: `%${nombre}%`,
+      });
+      hasInitialWhere = true; // Marcamos que ya usamos where()
+    }
+    // Aplica filtro por título del libro si se proporciona
+    if (libroTitulo) {
+      // Determinamos si usar where() (si es la primera condición) o andWhere()
+      const conditionMethod = hasInitialWhere ? 'andWhere' : 'where';
+      // Añadimos la condición sobre el campo 'titulo' de la tabla unida 'libro'
+      queryBuilder[conditionMethod]('libro.titulo ILIKE :libroTitulo', {
+        libroTitulo: `%${libroTitulo}%`,
+      });
+    }
 
-      // Filtrar por nombre de la saga
-      if (nombre) {
-        matches =
-          matches && saga.nombre.toUpperCase().includes(nombre.toUpperCase());
-      }
+    // Ejecuta la consulta construida y devuelve las sagas encontradas (con sus libros)
+    return queryBuilder.getMany();
+  }
 
-      // Filtrar por título de libro contenido en la saga
-      if (libroTitulo) {
-        const sagaContainsBook = saga.libros.some((libroId) => {
-          const libro = libros.find((l) => l.id === libroId);
-          return libro
-            ? libro.titulo.toUpperCase().includes(libroTitulo.toUpperCase())
-            : false;
-        });
-        matches = matches && sagaContainsBook;
-      }
-      return matches;
+  async create(createSagasDto: CreateSagasDto): Promise<Sagas> {
+    // Como CreateSagasDto ya no tiene 'libros',
+    // puedes pasarla directamente a 'create'
+    const nuevaSaga = this.sagasRepository.create(createSagasDto);
+    // Aseguramos que la propiedad 'libros' (que existe en la entidad)
+    // se inicialice como un array vacío. TypeORM usualmente lo hace,
+    nuevaSaga.libros = [];
+    try {
+      return await this.sagasRepository.save(nuevaSaga);
+    } catch (error) {
+      console.error('Error al guardar la saga:', error);
+      throw new InternalServerErrorException('Error al crear la saga.');
+    }
+  }
+
+  async findAll(): Promise<Sagas[]> {
+    // Usa la opción 'relations' para cargar automáticamente la propiedad 'libros'
+    // definida con @OneToMany en la entidad Sagas.
+    return this.sagasRepository.find({
+      relations: ['libros'], // El string debe coincidir con el nombre de la propiedad en la entidad Sagas
     });
-    return filteredSagas;
   }
 
-  create(createSagasDto: CreateSagasDto) {
-    const sagasEntity: Sagas = { ...createSagasDto };
-    const findIndex = sagas.findIndex((sagas) => sagas.id === sagasEntity.id);
-    if (findIndex !== -1) {
-      throw new ConflictException('Sagas with this ID already exists');
-    }
-    sagas.push(sagasEntity);
-    return sagasEntity;
-  }
-
-  findAll() {
-    return sagas;
-  }
-
-  findOne(id: number) {
-    const saga = sagas.find((sagas) => sagas.id === id);
+  async findOne(id: number): Promise<Sagas> {
+    // Busca la saga por su ID y también carga la relación 'libros'.
+    const saga = await this.sagasRepository.findOne({
+      where: { id }, // Condición para encontrar la saga específica
+      relations: ['libros'], // Carga los libros asociados
+    });
+    // Si no se encuentra la saga, lanza una excepción
     if (!saga) {
-      throw new NotFoundException(`Saga with ID ${id} not found`);
+      throw new NotFoundException(`Saga con ID ${id} no encontrada`);
     }
-    return `This action returns a sagas: ${JSON.stringify(saga)}`;
+    // Devuelve la entidad Saga encontrada (incluyendo sus libros)
+    return saga;
   }
 
-  update(id: number, updateSagasDto: UpdateSagasDto) {
-    const sagasIndex = sagas.findIndex((sagas) => sagas.id === id);
-    if (sagasIndex === -1) {
-      throw new NotFoundException(`Saga with ID ${id} not found`);
+  async update(id: number, updateSagasDto: UpdateSagasDto): Promise<Sagas> {
+    // 'preload' carga la saga y aplica los cambios del DTO (nombre, desc, etc.)
+    const saga = await this.sagasRepository.preload({
+      id: id,
+      ...updateSagasDto,
+    });
+
+    if (!saga) {
+      throw new NotFoundException(`Saga con ID ${id} no encontrada`);
     }
-    const updatedSagas = { ...sagas[sagasIndex], ...updateSagasDto };
-    sagas[sagasIndex] = updatedSagas;
-    return `This action updates a ${JSON.stringify(updatedSagas)} sagas`;
+    try {
+      // Guarda solo los cambios en los campos de la saga
+      return await this.sagasRepository.save(saga);
+    } catch (error) {
+      console.error('Error al actualizar la saga:', error);
+      throw new InternalServerErrorException('Error al actualizar la saga.');
+    }
   }
 
-  remove(id: number) {
-    const sagasIndex = sagas.findIndex((sagas) => sagas.id === id);
-    if (sagasIndex === -1) {
-      throw new NotFoundException(`Saga with ID ${id} not found`);
+  async remove(id: number): Promise<void> {
+    // Intenta eliminar la saga usando su clave primaria 'id'
+    const result = await this.sagasRepository.delete(id);
+    // Si 'affected' es 0, significa que no se encontró ninguna saga con ese ID
+    if (result.affected === 0) {
+      throw new NotFoundException(`Saga con ID ${id} no encontrada`);
     }
-    sagas.splice(sagasIndex, 1);
-    return `This action removes a #${sagasIndex} sagas`;
+    // No se retorna nada si la eliminación fue exitosa
   }
 }

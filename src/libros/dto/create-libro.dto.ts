@@ -1,7 +1,7 @@
 // src/libros/dto/create-libro.dto.ts
-/* eslint-disable prettier/prettier */
 export class CreateLibroDto {
-  titulo: string
+  sagaId: number; // <-- Necesario para saber a qué saga pertenece
+  titulo: string;
   autor: string;
   fechaEdicion: Date;
   numeroPaginas: number;

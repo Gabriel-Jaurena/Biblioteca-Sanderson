@@ -1,5 +1,9 @@
 // src/libros/libros.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm'; // <-- Importa InjectRepository
 import { Repository } from 'typeorm'; // <-- Importa Repository y utilidades
 import { CreateLibroDto } from './dto/create-libro.dto';
@@ -8,24 +12,23 @@ import { UpdateLibroDto } from './dto/update-libro.dto';
 // import { libros } from 'src/base-de-datos/libros';
 import { Libro } from './entities/libro.entity'; // <-- Tu entidad decorada
 import { QueryLibrosDto } from './dto/query-libros-dto';
+import { Sagas } from 'src/sagas/entities/sagas.entity';
 
 @Injectable()
 export class LibrosService {
-  // 1. Inyecta el Repositorio
+  // Repositorios inyectados (Libro y Sagas)
   constructor(
     @InjectRepository(Libro) // Especifica la entidad
     private librosRepository: Repository<Libro>, // El tipo es Repository<TuEntidad>
+    @InjectRepository(Sagas) // Especifica la entidad Sagas
+    private sagasRepository: Repository<Sagas>, // Reemplaza 'any' con Repository<Sagas>
   ) {}
-
-  // 2. Adapta los métodos para usar el repositorio (ahora son async)
 
   // Método para filtrar (ejemplo básico, se puede mejorar con QueryBuilder)
   async filterLibros(query: QueryLibrosDto): Promise<Libro[]> {
     const { titulo, fechaEdicion } = query;
-
     // Iniciamos el QueryBuilder para la entidad Libro con el alias 'libro'
     const queryBuilder = this.librosRepository.createQueryBuilder('libro');
-
     // Aplicamos filtro por título si existe (búsqueda parcial insensible a mayúsculas)
     if (titulo) {
       // Usamos 'ILIKE' para PostgreSQL (case-insensitive LIKE)
@@ -34,7 +37,6 @@ export class LibrosService {
         titulo: `%${titulo}%`,
       });
     }
-
     // Aplicamos filtro por año si existe
     if (fechaEdicion) {
       // Aseguramos que fechaEdicion sea tratado como número (año)
@@ -53,48 +55,92 @@ export class LibrosService {
         );
       }
     }
-
     // Ejecutamos la consulta construida y retornamos los resultados
     return queryBuilder.getMany();
   }
 
   async create(createLibroDto: CreateLibroDto): Promise<Libro> {
-    const nuevoLibro = this.librosRepository.create(createLibroDto);
-    return this.librosRepository.save(nuevoLibro);
+    const { sagaId, ...libroData } = createLibroDto;
+
+    // 1. Validar que la saga exista
+    // Usa 'as Sagas | null' para forzar el tipo y evitar el error de ESLint
+    const saga = await this.sagasRepository.findOneBy({
+      id: sagaId,
+    });
+    if (!saga) {
+      throw new NotFoundException(`Saga con ID ${sagaId} no encontrada.`);
+    }
+    // 2. Calcular el siguiente libroNumero para esa saga
+    const ultimoLibro = await this.librosRepository.findOne({
+      where: { sagaId: sagaId },
+      order: { libroNumero: 'DESC' }, // Ordena descendente por libroNumero
+    });
+
+    const proximoLibroNumero = ultimoLibro ? ultimoLibro.libroNumero + 1 : 1;
+
+    // 3. Crear la entidad Libro con los IDs compuestos y los datos
+    const nuevoLibro = this.librosRepository.create({
+      ...libroData,
+      sagaId: sagaId, // Asigna la parte sagaId de la PK
+      libroNumero: proximoLibroNumero, // Asigna la parte libroNumero CALCULADA
+    });
+
+    // 4. Guardar en la base de datos
+    try {
+      return await this.librosRepository.save(nuevoLibro);
+    } catch (error) {
+      // Manejo básico de errores (ej. race condition si dos requests calculan el mismo número)
+      console.error('Error al guardar el libro:', error);
+      // Podrías verificar si el error es por PK duplicada y reintentar
+      throw new InternalServerErrorException('Error al crear el libro.');
+    }
   }
 
   async findAll(): Promise<Libro[]> {
     return this.librosRepository.find();
   }
 
-  async findOne(id: number): Promise<Libro> {
-    const libro = await this.librosRepository.findOneBy({ id });
+  async findOne(sagaId: number, libroNumero: number): Promise<Libro> {
+    // Busca usando AMBAS partes de la clave primaria
+    const libro = await this.librosRepository.findOneBy({
+      sagaId,
+      libroNumero,
+    });
     if (!libro) {
-      throw new NotFoundException(`Libro con ID ${id} no encontrado`);
+      // Mensaje de error más claro
+      throw new NotFoundException(
+        `Libro ${sagaId}-${libroNumero} no encontrado`,
+      );
     }
     return libro;
   }
 
-  async update(id: number, updateLibroDto: UpdateLibroDto): Promise<Libro> {
-    // preload carga la entidad existente y fusiona los nuevos datos
+  async update(
+    sagaId: number,
+    libroNumero: number,
+    updateLibroDto: UpdateLibroDto,
+  ): Promise<Libro> {
+    // preload también necesita AMBAS partes de la clave
     const libro = await this.librosRepository.preload({
-      id: id,
+      sagaId: sagaId,
+      libroNumero: libroNumero,
       ...updateLibroDto,
     });
     if (!libro) {
-      throw new NotFoundException(`Libro con ID ${id} no encontrado`);
+      throw new NotFoundException(
+        `Libro ${sagaId}-${libroNumero} no encontrado`,
+      );
     }
-    // save actualiza la entidad en la BD
     return this.librosRepository.save(libro);
   }
 
-  async remove(id: number): Promise<void> {
-    // <-- Cambiado para retornar void
-    const result = await this.librosRepository.delete(id);
+  async remove(sagaId: number, libroNumero: number): Promise<void> {
+    // delete también necesita AMBAS partes de la clave
+    const result = await this.librosRepository.delete({ sagaId, libroNumero });
     if (result.affected === 0) {
-      // Si no afectó ninguna fila, el libro no existía
-      throw new NotFoundException(`Libro con ID ${id} no encontrado`);
+      throw new NotFoundException(
+        `Libro ${sagaId}-${libroNumero} no encontrado`,
+      );
     }
-    // No es necesario retornar nada en un DELETE exitoso
   }
 }
