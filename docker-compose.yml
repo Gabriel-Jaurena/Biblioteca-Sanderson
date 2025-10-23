@@ -1,0 +1,21 @@
+version: '3.8' # Usamos una versión moderna
+services:
+  # Nombre del servicio que usaremos para referenciarlo en NestJS (si usas Docker Network)
+  postgres:
+    image: 'postgres:14-alpine' # Una versión específica y ligera
+    restart: always
+    environment:
+      # Credenciales y nombre de la BD. ¡Deben coincidir con tu app NestJS!
+      POSTGRES_USER: sanderson
+      POSTGRES_PASSWORD: 123456789 # CAMBIA ESTO por una contraseña segura
+      POSTGRES_DB: cosmere
+    ports:
+      # Mapea el puerto del contenedor (5432) a tu máquina local (5432)
+      - '5432:5432'
+    volumes:
+      # Asegura que los datos no se pierdan si el contenedor se detiene
+      - 'postgres_data:/var/lib/postgresql/data'
+
+volumes:
+  postgres_data:
+    # Docker creará y gestionará este volumen automáticamente
