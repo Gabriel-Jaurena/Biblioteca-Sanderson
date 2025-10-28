@@ -12,7 +12,8 @@ import { UpdateLibroDto } from './dto/update-libro.dto';
 // import { libros } from 'src/base-de-datos/libros';
 import { Libro } from './entities/libro.entity'; // <-- Tu entidad decorada
 import { QueryLibrosDto } from './dto/query-libros-dto';
-import { Sagas } from 'src/sagas/entities/sagas.entity';
+import { SagasService } from '../sagas/sagas.service'; // <-- Importa SagasService
+// import { Sagas } from 'src/sagas/entities/sagas.entity';
 
 @Injectable()
 export class LibrosService {
@@ -20,8 +21,7 @@ export class LibrosService {
   constructor(
     @InjectRepository(Libro) // Especifica la entidad
     private librosRepository: Repository<Libro>, // El tipo es Repository<TuEntidad>
-    @InjectRepository(Sagas) // Especifica la entidad Sagas
-    private sagasRepository: Repository<Sagas>, // Reemplaza 'any' con Repository<Sagas>
+    private sagasService: SagasService, // Inyecta SagasService
   ) {}
 
   // Método para filtrar (ejemplo básico, se puede mejorar con QueryBuilder)
@@ -62,36 +62,41 @@ export class LibrosService {
   async create(createLibroDto: CreateLibroDto): Promise<Libro> {
     const { sagaId, ...libroData } = createLibroDto;
 
-    // 1. Validar que la saga exista
-    // Usa 'as Sagas | null' para forzar el tipo y evitar el error de ESLint
-    const saga = await this.sagasRepository.findOneBy({
-      id: sagaId,
-    });
-    if (!saga) {
-      throw new NotFoundException(`Saga con ID ${sagaId} no encontrada.`);
+    // 1. Validar que la saga exista USANDO SagasService
+    try {
+      // Llama al método findOne del SagasService
+      //findOne lanza NotFoundException si no encuentra, así que no necesitamos verificar 'saga' después
+      await this.sagasService.findOne(sagaId);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        // Re-lanza o maneja el error específico de saga no encontrada
+        throw new NotFoundException(
+          `Saga con ID ${sagaId} no encontrada al intentar crear el libro.`,
+        );
+      }
+      // Lanza otros errores inesperados
+      throw error;
     }
-    // 2. Calcular el siguiente libroNumero para esa saga
+
+    // 2. Calcular el siguiente libroNumero (lógica existente)
     const ultimoLibro = await this.librosRepository.findOne({
       where: { sagaId: sagaId },
-      order: { libroNumero: 'DESC' }, // Ordena descendente por libroNumero
+      order: { libroNumero: 'DESC' },
     });
-
     const proximoLibroNumero = ultimoLibro ? ultimoLibro.libroNumero + 1 : 1;
 
-    // 3. Crear la entidad Libro con los IDs compuestos y los datos
+    // 3. Crear la entidad Libro (lógica existente)
     const nuevoLibro = this.librosRepository.create({
       ...libroData,
-      sagaId: sagaId, // Asigna la parte sagaId de la PK
-      libroNumero: proximoLibroNumero, // Asigna la parte libroNumero CALCULADA
+      sagaId: sagaId,
+      libroNumero: proximoLibroNumero,
     });
 
-    // 4. Guardar en la base de datos
+    // 4. Guardar en la base de datos (lógica existente)
     try {
       return await this.librosRepository.save(nuevoLibro);
     } catch (error) {
-      // Manejo básico de errores (ej. race condition si dos requests calculan el mismo número)
       console.error('Error al guardar el libro:', error);
-      // Podrías verificar si el error es por PK duplicada y reintentar
       throw new InternalServerErrorException('Error al crear el libro.');
     }
   }

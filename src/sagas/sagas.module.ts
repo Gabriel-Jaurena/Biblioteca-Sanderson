@@ -13,5 +13,6 @@ import { Libro } from '../libros/entities/libro.entity'; // <-- 3. Importa la en
   ],
   controllers: [SagasController],
   providers: [SagasService],
+  exports: [SagasService], // <-- 5. Exporta el servicio
 })
 export class SagasModule {}

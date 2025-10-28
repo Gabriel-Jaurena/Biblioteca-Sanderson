@@ -1,4 +1,4 @@
 export class QuerySagasDto {
-  nombre: string;
-  libroTitulo: string;
+  nombre: string; // Título de la saga
+  libroTitulo: string; // Título del libro asociado
 }
