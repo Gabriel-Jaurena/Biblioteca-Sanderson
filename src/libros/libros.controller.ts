@@ -25,6 +25,7 @@ export class LibrosController {
 
   @Get()
   async findAll(@Query() query: QueryLibrosDto): Promise<Libro[]> {
+    // Verifica si hay parámetros de consulta
     if (Object.keys(query).length) {
       return await this.librosService.filterLibros(query);
     }
