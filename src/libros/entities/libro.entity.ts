@@ -1,38 +1,40 @@
-// src/libros/entities/libro.entity.ts
-/* eslint-disable prettier/prettier */
-import { Entity, Column, ManyToOne, PrimaryColumn, JoinColumn } from 'typeorm'; // <-- Cambia imports
+import {
+  Entity,
+  Column,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  JoinColumn,
+} from 'typeorm';
 import { Sagas } from '../../sagas/entities/sagas.entity';
 
 @Entity('libros')
 export class Libro {
-    // --- Clave Primaria Compuesta ---
-    @PrimaryColumn('int') // Columna parte de la PK, tipo entero
-    sagaId: number;
+  @PrimaryGeneratedColumn() // <--- ID Estándar (1, 2, 3...)
+  id: number;
 
-    @PrimaryColumn('int') // Segunda columna parte de la PK, tipo entero
-    libroNumero: number; // Este número lo generarás tú (1, 2, 3...)
+  @Column()
+  sagaId: number; // <--- Campo normal para la relación
 
-    // --- Relación ManyToOne con Sagas ---
-    @ManyToOne(() => Sagas, (saga) => saga.libros, {
-        nullable: false, // Un libro DEBE pertenecer a una saga
-        onDelete: 'CASCADE' // Opcional: Si se borra la saga, se borran sus libros
-    })
-    @JoinColumn({ name: 'sagaId' }) // Especifica que sagaId es la FK
-    saga: Sagas;
-    // --- Fin Relación ---
+  // Relación con Sagas
+  @ManyToOne(() => Sagas, (saga) => saga.libros, {
+    nullable: false,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'sagaId' })
+  saga: Sagas;
 
-    @Column({ length: 255 })
-    titulo: string
+  @Column({ length: 255 })
+  titulo: string;
 
-    @Column()
-    autor: string;
+  @Column()
+  autor: string;
 
-    @Column('date')
-    fechaEdicion: Date;
+  @Column('date')
+  fechaEdicion: Date;
 
-    @Column('int')
-    numeroPaginas: number;
+  @Column('int')
+  numeroPaginas: number;
 
-    @Column('text', { nullable: true })
-    descripcion: string;
+  @Column('text', { nullable: true })
+  descripcion: string;
 }
