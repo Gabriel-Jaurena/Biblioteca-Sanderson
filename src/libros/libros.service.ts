@@ -26,7 +26,7 @@ export class LibrosService {
 
   // Filter simplificado para buscar por propiedades del libro
   async filterLibros(query: QueryLibrosDto): Promise<Libro[]> {
-    const { titulo, fechaEdicion } = query;
+    const { titulo, fechaEdicion, sagaId } = query;
     const queryBuilder = this.librosRepository.createQueryBuilder('libro');
 
     if (titulo) {
@@ -41,6 +41,9 @@ export class LibrosService {
           year,
         });
       }
+    }
+    if (sagaId) {
+      queryBuilder.andWhere('libro.sagaId = :sagaId', { sagaId });
     }
     return queryBuilder.getMany();
   }
