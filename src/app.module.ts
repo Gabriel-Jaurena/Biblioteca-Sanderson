@@ -5,28 +5,32 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { LibrosModule } from './libros/libros.module';
 import { SagasModule } from './sagas/sagas.module';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 // Ya no necesitas importar las entidades aquí si usas autoLoadEntities
 // import { Libro } from './libros/entities/libro.entity';
 // import { Sagas } from './sagas/entities/sagas.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: 'localhost',
-      port: 5432,
-      username: 'sanderson',
-      password: '123456789', // ¡Recuerda cambiarla!
-      database: 'cosmere',
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
 
-      // --- Cambios aquí ---
-      // Quita la línea 'entities: [Libro, Sagas],'
-      // entities: [Libro, Sagas],
-      // Y añade esta línea:
-      autoLoadEntities: true,
-      // --- Fin Cambios ---
-
-      synchronize: true, // ¡Solo para desarrollo!
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        type: 'postgres',
+        url: configService.get<string>('DB_URL'),
+        ssl: true,
+        extra: {
+          ssl: {
+            rejectUnauthorized: false,
+          },
+        },
+        autoLoadEntities: true,
+        synchronize: true,
+      }),
     }),
     LibrosModule,
     SagasModule,
